@@ -1,7 +1,3 @@
-Aquí tienes una versión mejorada del markdown, con formato más claro, secciones bien organizadas y justificaciones estructuradas para facilitar su comprensión y mantenimiento:
-
----
-
 ## 📋 SURVEYS API
 
 ### 1. `POST /surveys` — Create a New Survey
