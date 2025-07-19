@@ -5,6 +5,7 @@ from psycopg2 import IntegrityError
 from app.common.database import cursor
 from app.surveys.schema import SurveyCreateSchema, SurveyOptionSchema, SurveyQuestionSchema, SurveyQuestionTypeSchema
 
+
 def create_survey_controller(body: SurveyCreateSchema):
     try:
 
@@ -30,28 +31,29 @@ def create_survey_controller(body: SurveyCreateSchema):
         raise RuntimeError(f"Error creating survey: {str(e)}")
 
 
-def create_survey_question_controller(id_survey: int, body: SurveyQuestionSchema):
+def create_survey_question_controller(survey_id: int, body: SurveyQuestionSchema):
     try:
 
         survey_check_query = "SELECT * FROM survey WHERE id = %s;"
-        cursor.execute(survey_check_query,(id_survey,))
+        cursor.execute(survey_check_query, (survey_id,))
         survey_exists = cursor.fetchone()
         if not survey_exists:
-            raise RuntimeError(f"La encuesta con id {id_survey} no existe.")
+            raise RuntimeError(f"La encuesta con id {survey_id} no existe.")
         question_type_check_query = "SELECT * FROM question_type WHERE id= %s;"
-        cursor.execute(question_type_check_query,(body.id_question_type,))
+        cursor.execute(question_type_check_query, (body.id_question_type,))
         question_type_exists = cursor.fetchone()
         if not question_type_exists:
-            raise RuntimeError(f"El tipo de pregunta con id {body.id_question_type} no existe.")
-        
+            raise RuntimeError(
+                f"El tipo de pregunta con id {body.id_question_type} no existe.")
+
         created_at = datetime.now()
         updated_at = datetime.now()
-        query="""
-        INSERT INTO question(id_survey,id_question_type ,text,created_at,updated_at,is_active)
+        query = """
+        INSERT INTO question(survey_id,id_question_type ,text,created_at,updated_at,is_active)
         VALUES (%s,%s,%s,%s,%s,%s) RETURNING *;
         """
-        params =  (
-            id_survey,
+        params = (
+            survey_id,
             body.id_question_type,
             body.text,
             created_at,
@@ -77,13 +79,15 @@ def create_survey_question_controller(id_survey: int, body: SurveyQuestionSchema
     except Exception as e:
         cursor.connection.rollback()
         raise RuntimeError(f"Error creating survey question: {str(e)}")
-def create_survey_question_option_controller(id_question: int, body: SurveyOptionSchema):
+
+
+def create_survey_question_option_controller(question_id: int, body: SurveyOptionSchema):
     try:
-        question_check_query ="SELECT * FROM question WHERE id = %s;"
-        cursor.execute(question_check_query,(id_question,))
+        question_check_query = "SELECT * FROM question WHERE id = %s;"
+        cursor.execute(question_check_query, (question_id,))
         question_exists = cursor.fetchone()
         if not question_exists:
-            raise RuntimeError(f"La pregunta con id {id_question} no existe.")
+            raise RuntimeError(f"La pregunta con id {question_id} no existe.")
         # Only allowed for single_choice or multiple_choice questions.
         # You must enforce this rule at either the application or database level — explain your choice.
         id_question_type = question_exists['id_question_type']
@@ -92,26 +96,27 @@ def create_survey_question_option_controller(id_question: int, body: SurveyOptio
         question_type_exists = cursor.fetchone()
         print(question_type_exists)
         if not question_type_exists["allow_options"]:
-            raise RuntimeError(f"El tipo de pregunta con id {id_question_type} no permite opciones.")
-
+            raise RuntimeError(
+                f"El tipo de pregunta con id {id_question_type} no permite opciones.")
 
         query = """
-        INSERT INTO option(id_question,text)
+        INSERT INTO option(question_id,text)
         VALUES (%s,%s) RETURNING *;
         """
-        params = ( id_question,body.text)
-        cursor.execute(query,params)
+        params = (question_id, body.text)
+        cursor.execute(query, params)
         new_option = cursor.fetchone()
         cursor.connection.commit()
         response = {
-            "id":new_option["id"],
-            "question_id": new_option["id_question"],
-            "text":new_option["text"]
+            "id": new_option["id"],
+            "question_id": new_option["question_id"],
+            "text": new_option["text"]
         }
         return {"option": response}
-    except  RuntimeError as e:
+    except RuntimeError as e:
         cursor.connection.rollback()
         raise e
+
 
 def create_survey_question_type_controller(body: SurveyQuestionTypeSchema):
     try:
@@ -119,17 +124,17 @@ def create_survey_question_type_controller(body: SurveyQuestionTypeSchema):
         INSERT INTO question_type (title,description,allow_options)
         VALUES (%s,%s,%s) RETURNING *;
         """
-        params = (body.title,body.description,body.allow_options)
+        params = (body.title, body.description, body.allow_options)
         cursor.execute(query, params)
-        response= cursor.fetchone()
+        response = cursor.fetchone()
         cursor.connection.commit()
-        return {"question_type":response}
+        return {"question_type": response}
     except IntegrityError as ie:
         cursor.connection.rollback()
         if "unique_title" in str(ie) or "duplicate key" in str(ie):
             raise RuntimeError(f"El título '{body.title}' ya existe.")
         raise RuntimeError(f"Database integrity error: {str(ie)}")
-    
+
     except Exception as e:
         cursor.connection.rollback()
         raise RuntimeError(f"Error creating survey question option: {str(e)}")
@@ -139,18 +144,19 @@ def create_survey_question_type_controller(body: SurveyQuestionTypeSchema):
 def get_survey_question_type_controller():
     print("question_types")
     try:
-        query ="""
+        query = """
         SELECT * FROM question_type;
         """
         cursor.execute(query)
         question_types = cursor.fetchall()
         return {"question_types": question_types}
     except Exception as e:
-        raise HTTPException(status_code=500,detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 def get_survey_by_id_controller(survey_id: int):
     try:
-        query ="""
+        query = """
         SELECT
             s.id AS survey_id,
             s.title AS survey_title,
@@ -168,9 +174,9 @@ def get_survey_by_id_controller(survey_id: int):
             o.text AS option_text
 
         FROM survey s
-        JOIN question q ON q.id_survey = s.id
+        JOIN question q ON q.survey_id = s.id
         JOIN question_type qt ON qt.id = q.id_question_type
-        LEFT JOIN option o ON o.id_question = q.id
+        LEFT JOIN option o ON o.question_id = q.id
         WHERE s.id = %s AND s.is_active = TRUE
         ORDER BY q.id, o.id;
         """
@@ -214,5 +220,5 @@ def get_survey_by_id_controller(survey_id: int):
 
         return {"survey": survey}
     except Exception as e:
-        print( f"Error retrieving survey by id {survey_id}: {str(e)}")
+        print(f"Error retrieving survey by id {survey_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
